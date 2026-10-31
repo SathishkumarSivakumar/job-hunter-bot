@@ -9,23 +9,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import requests
 
-# 1. Fetch Environment Secrets
+# Secrets load pannudhal
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 GMAIL_USER = os.getenv("GMAIL_USER", "").strip()
 GMAIL_APP_PASS = os.getenv("GMAIL_APP_PASS", "").strip().replace(" ", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-
-print("=" * 50)
-print("[*] PRE-FLIGHT ENVIRONMENT DIAGNOSTICS:")
-print(f" • SUPABASE_URL exists: {bool(SUPABASE_URL)} (Prefix: {SUPABASE_URL[:12] if SUPABASE_URL else 'None'})")
-print(f" • SUPABASE_KEY exists: {bool(SUPABASE_KEY)}")
-print(f" • GMAIL_USER exists: {bool(GMAIL_USER)}")
-print(f" • GMAIL_APP_PASS exists: {bool(GMAIL_APP_PASS)}")
-print(f" • TELEGRAM_BOT_TOKEN exists: {bool(TELEGRAM_BOT_TOKEN)}")
-print(f" • TELEGRAM_CHAT_ID exists: {bool(TELEGRAM_CHAT_ID)}")
-print("=" * 50)
 
 DB_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -35,37 +25,34 @@ DB_HEADERS = {
 
 def send_telegram(msg: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[!] Telegram credentials missing. Skipping notification.")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try:
-        r = requests.post(url, json=payload, timeout=10)
-        print(f"[+] Telegram alert status: {r.status_code}")
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print(f"[-] Telegram dispatch error: {e}")
 
 def get_candidate_profile():
-    endpoint = f"{SUPABASE_URL}/rest/v1/master_profile?select=*"
-    print(f"[*] Querying Supabase: {endpoint}")
+    # URL formatting error varama irukka direct strip
+    base_url = SUPABASE_URL.rstrip('/')
+    endpoint = f"{base_url}/rest/v1/master_profile?select=*"
     try:
         res = requests.get(endpoint, headers=DB_HEADERS, timeout=15)
-        print(f" • Supabase Response Status: {res.status_code}")
-        print(f" • Supabase Raw Body: {res.text}")
         if res.status_code == 200:
             data = res.json()
             if data and len(data) > 0:
                 return data[0]
-            else:
-                print("[-] Supabase returned an empty list []. Table has 0 rows.")
+            print("[-] Supabase master_profile table empty-aa irukku.")
         else:
-            print(f"[-] HTTP Error from Supabase: {res.status_code} - {res.text}")
+            print(f"[-] Supabase Error: {res.status_code} - {res.text}")
     except Exception as e:
-        print(f"[-] Exception connecting to Supabase: {e}")
+        print(f"[-] Supabase connection error: {e}")
     return None
 
 def is_duplicate(job_hash: str) -> bool:
-    endpoint = f"{SUPABASE_URL}/rest/v1/application_history?job_hash=eq.{job_hash}&select=id"
+    base_url = SUPABASE_URL.rstrip('/')
+    endpoint = f"{base_url}/rest/v1/application_history?job_hash=eq.{job_hash}&select=id"
     try:
         res = requests.get(endpoint, headers=DB_HEADERS, timeout=15)
         if res.status_code == 200:
@@ -75,7 +62,8 @@ def is_duplicate(job_hash: str) -> bool:
     return False
 
 def record_dispatch(company: str, role: str, email: str, job_hash: str):
-    endpoint = f"{SUPABASE_URL}/rest/v1/application_history"
+    base_url = SUPABASE_URL.rstrip('/')
+    endpoint = f"{base_url}/rest/v1/application_history"
     data = {
         "company_name": company,
         "role_title": role,
@@ -86,14 +74,18 @@ def record_dispatch(company: str, role: str, email: str, job_hash: str):
     try:
         requests.post(endpoint, headers=DB_HEADERS, json=data, timeout=15)
     except Exception as e:
-        print(f"[-] Error logging to Supabase: {e}")
+        print(f"[-] History log error: {e}")
 
 def send_tailored_pitch(company: str, role: str, recipient_email: str, profile: dict) -> bool:
     if not GMAIL_USER or not GMAIL_APP_PASS:
-        print("[-] Skipping email: Gmail credentials not configured.")
         return False
 
-    subject = f"Application: {role} | {profile.get('full_name', 'Sathishkumar S')} (Immediate Joiner - 0 Days Notice)"
+    name = profile.get('full_name', 'Sathishkumar S')
+    phone = profile.get('phone', '+91 9789704124')
+    email = profile.get('email', 'kumar109662@gmail.com')
+    city = profile.get('current_city', 'Chennai, India')
+
+    subject = f"Application: {role} | {name} (Immediate Joiner - 0 Days Notice)"
     body = f"""Hi Talent Acquisition Team at {company},
 
 I am writing to express my strong interest in data & business intelligence opportunities ({role}) at {company}.
@@ -111,14 +103,14 @@ Candidate Highlights:
 • Preferred Locations: Chennai, Bengaluru, Coimbatore, Hyderabad, or Remote.
 
 Contact:
-Phone: {profile.get('phone', '+91 9789704124')}
-Email: {profile.get('email', 'kumar109662@gmail.com')}
-Current City: {profile.get('current_city', 'Chennai, India')}
+Phone: {phone}
+Email: {email}
+Current City: {city}
 
 I look forward to discussing how my analytical experience can add immediate value to your current projects.
 
 Best regards,
-{profile.get('full_name', 'Sathishkumar S')}
+{name}
 """
     msg = MIMEMultipart()
     msg['From'] = GMAIL_USER
@@ -131,7 +123,7 @@ Best regards,
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
             server.login(GMAIL_USER, GMAIL_APP_PASS)
             server.sendmail(GMAIL_USER, recipient_email, msg.as_string())
-        print(f"[✓] Email delivered to {company} ({recipient_email})")
+        print(f"[✓] Sent email to {company} ({recipient_email})")
         return True
     except Exception as e:
         print(f"[-] SMTP Dispatch error to {company}: {e}")
@@ -148,10 +140,10 @@ TARGET_COMPANIES = [
 def main():
     profile = get_candidate_profile()
     if not profile:
-        print("[!] Stopping: Candidate profile could not be loaded from Supabase.")
+        print("[!] Stopping: Candidate profile Supabase-la load aagala.")
         sys.exit(1)
 
-    print(f"[*] Processing applications for: {profile.get('full_name')}")
+    print(f"[*] Dispatching for: {profile.get('full_name')}")
     dispatched = []
 
     for target in TARGET_COMPANIES:
@@ -167,13 +159,13 @@ def main():
             dispatched.append(f"✅ *{target['name']}* — {target['role']}")
 
         delay = random.uniform(20.0, 30.0)
-        print(f"[*] Waiting {delay:.1f}s before next application...")
+        print(f"[*] Sleeping {delay:.1f}s before next application...")
         time.sleep(delay)
 
     if dispatched:
-        msg = f"🚀 *Job Hunter Report (9 AM – 12 PM)*\n\n👤 *{profile['full_name']}* (CGPA: 8.3 | 0-Day Notice)\n\n" + "\n".join(dispatched)
+        msg = f"🚀 *Job Hunter Report (9 AM – 12 PM)*\n\n👤 *{profile.get('full_name')}* (CGPA: 8.3 | 0-Day Notice)\n\n" + "\n".join(dispatched)
     else:
-        msg = "ℹ️ இன்றைய டார்கெட் நிறுவனங்களுக்கு ஏற்கனவே அனுப்பப்பட்டுவிட்டது."
+        msg = "ℹ️ Target companies-ku profile already send aayiduchu."
     
     send_telegram(msg)
     print("[*] Engine completed successfully.")
