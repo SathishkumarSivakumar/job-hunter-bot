@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Hunter 2060 Dashboard</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #0b0f19; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    </style>
+</head>
+<body class="p-4 max-w-md mx-auto min-h-screen flex flex-col justify-between">
+
+    <div>
+        <!-- Top App Header -->
+        <div class="flex items-center justify-between py-3 border-b border-slate-800">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+                    <i class="fa-solid fa-robot text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base tracking-wide text-white">Hunter OS 2060</h1>
+                    <p class="text-xs text-emerald-400 flex items-center"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-1.5"></span>Autonomous Active</p>
+                </div>
+            </div>
+            <button onclick="fetchStats()" class="p-2 bg-slate-800 rounded-lg text-slate-300 hover:text-white">
+                <i class="fa-solid fa-arrows-rotate text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+                <div class="text-xs text-slate-400">Inraiku Apply</div>
+                <div id="todayCount" class="text-2xl font-black text-cyan-400 mt-1">0</div>
+                <div class="text-[10px] text-slate-500 mt-1">Automated 9 AM Engine</div>
+            </div>
+            <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-sm">
+                <div class="text-xs text-slate-400">Total Applied</div>
+                <div id="totalCount" class="text-2xl font-black text-indigo-400 mt-1">0</div>
+                <div class="text-[10px] text-emerald-400 mt-1">100% ATS Match</div>
+            </div>
+        </div>
+
+        <!-- Live Dispatches Feed -->
+        <div class="mt-6">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold tracking-wide text-slate-300">Live Applications</h2>
+                <span class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full" id="historyCount">0 entries</span>
+            </div>
+
+            <div id="applicationsList" class="space-y-3">
+                <div class="text-center py-8 text-slate-500 text-sm">
+                    <i class="fa-solid fa-circle-notch fa-spin text-xl mb-2 text-cyan-500 block"></i>
+                    Data load aaguthu...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Footer Profile -->
+    <div class="mt-6 pt-3 border-t border-slate-800/80 text-center text-xs text-slate-500">
+        Candidate: <span class="text-slate-300 font-medium">Sathishkumar S</span> • CGPA: 8.3
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://akrtilsqxopkvmlzknrd.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrcnRpbHNxeG9wa3ZtbHprbnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NzMzNzMsImV4cCI6MjEwOTA0OTM3M30.9ZKh1JRbtVPKi4LjvC7CwLA-cUmnxT9DBvabbf0df9g";
+
+        async function fetchStats() {
+            const listEl = document.getElementById("applicationsList");
+            const todayCountEl = document.getElementById("todayCount");
+            const totalCountEl = document.getElementById("totalCount");
+            const historyCountEl = document.getElementById("historyCount");
+
+            try {
+                // Fetch from autonomous_dispatches table
+                let res = await fetch(`${SUPABASE_URL}/rest/v1/autonomous_dispatches?select=*&order=dispatched_at.desc`, {
+                    headers: {
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": `Bearer ${SUPABASE_KEY}`
+                    }
+                });
+
+                let data = await res.json();
+
+                // If empty or not yet inserted, fallback to application_history
+                if (!Array.isArray(data) || data.length === 0) {
+                    let fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/application_history?select=*&order=applied_at.desc`, {
+                        headers: {
+                            "apikey": SUPABASE_KEY,
+                            "Authorization": `Bearer ${SUPABASE_KEY}`
+                        }
+                    });
+                    data = await fallbackRes.json();
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    listEl.innerHTML = `<div class="text-center py-8 text-slate-500 text-xs">Innum applications edhuvum register aagala.</div>`;
+                    todayCountEl.innerText = "0";
+                    totalCountEl.innerText = "0";
+                    historyCountEl.innerText = "0";
+                    return;
+                }
+
+                totalCountEl.innerText = data.length;
+                historyCountEl.innerText = `${data.length} entries`;
+
+                // Calculate today applications count
+                const todayStr = new Date().toISOString().slice(0, 10);
+                let todayCount = data.filter(item => {
+                    const dt = item.dispatched_at || item.applied_at || "";
+                    return dt.startsWith(todayStr);
+                }).length;
+                todayCountEl.innerText = todayCount;
+
+                listEl.innerHTML = "";
+                data.forEach(item => {
+                    const company = item.company_name || "Direct IT Firm";
+                    const role = item.role_title || "Data Analyst";
+                    const status = item.status || "APPLIED";
+                    const portal = item.portal_name || item.portal_or_email || "Direct Carrier";
+                    const rawDate = item.dispatched_at || item.applied_at || "";
+                    const dateFormatted = rawDate ? new Date(rawDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "Recent";
+
+                    const card = `
+                        <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-3 shadow-md flex justify-between items-center">
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="font-bold text-sm text-slate-100">${company}</span>
+                                    <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800/40 px-1.5 py-0.2 rounded font-semibold">100% ATS</span>
+                                </div>
+                                <div class="text-xs text-slate-400 mt-0.5">${role}</div>
+                                <div class="text-[10px] text-slate-500 mt-1 flex items-center space-x-2">
+                                    <span><i class="fa-solid fa-paper-plane text-[9px] mr-1"></i>${portal}</span>
+                                    <span>•</span>
+                                    <span>${dateFormatted}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-1 rounded-md font-medium tracking-wide">
+                                    ${status}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                    listEl.innerHTML += card;
+                });
+
+            } catch (err) {
+                console.error(err);
+                listEl.innerHTML = `<div class="text-center py-6 text-red-400 text-xs">Error connecting to Supabase: ${err.message}</div>`;
+            }
+        }
+
+        fetchStats();
+        // Auto refresh every 30 seconds
+        setInterval(fetchStats, 30000);
+    </script>
+</body>
+</html>
