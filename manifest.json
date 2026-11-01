@@ -1,0 +1,16 @@
+{
+  "name": "Hunter OS 2060",
+  "short_name": "HunterOS",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/4712/4712109.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
